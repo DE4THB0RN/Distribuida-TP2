@@ -540,9 +540,7 @@ class TrafficLight:
         with self.state_lock:
             self.mutex_state = self.HELD
             
-        # Transição: RED -> YELLOW -> GREEN
-        self.change_light_state(self.YELLOW)
-        time.sleep(1)
+        # Transição: RED -> GREEN
         self.change_light_state(self.GREEN)
         
         print(f"[{self.node_id}] *** NA SEÇÃO CRÍTICA (VERDE) ***")
