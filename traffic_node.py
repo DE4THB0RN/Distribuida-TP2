@@ -486,10 +486,11 @@ class TrafficLight:
         # Lista de peers ativos neste ciclo (para quem conseguimos enviar)
         active_request_peers = [] 
         # Envia requisição para todos os peers
+        
+        # [LAMPORT] Ao enviar: usa o timestamp
+        send_time = self.clock.send_time()
+
         for peer in self.peers:
-            # [LAMPORT] Ao enviar: usa o timestamp
-            send_time = self.clock.send_time()
-            
             # [RPC MANUAL] Invoca método remoto com retry
             success = self.comms.send_rpc(
                 peer,

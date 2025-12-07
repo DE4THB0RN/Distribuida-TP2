@@ -53,32 +53,17 @@ Aguardando conexões de nós de semáforo...
 
 **Terminal 2 - Nó 1:**
 ```bash
-python traffic_node.py \
-    --id Node1 \
-    --host 127.0.0.1 \
-    --port 5001 \
-    --peers 127.0.0.1:5002,127.0.0.1:5003 \
-    --logger 127.0.0.1:9000
+python traffic_node.py --id Node1 --host 127.0.0.1 --port 5001 --peers 127.0.0.1:5002,127.0.0.1:5003 --logger 127.0.0.1:9000
 ```
 
 **Terminal 3 - Nó 2:**
 ```bash
-python traffic_node.py \
-    --id Node2 \
-    --host 127.0.0.1 \
-    --port 5002 \
-    --peers 127.0.0.1:5001,127.0.0.1:5003 \
-    --logger 127.0.0.1:9000
+python traffic_node.py --id Node2 --host 127.0.0.1 --port 5002 --peers 127.0.0.1:5001,127.0.0.1:5003 --logger 127.0.0.1:9000
 ```
 
 **Terminal 4 - Nó 3:**
 ```bash
-python traffic_node.py \
-    --id Node3 \
-    --host 127.0.0.1 \
-    --port 5003 \
-    --peers 127.0.0.1:5001,127.0.0.1:5002 \
-    --logger 127.0.0.1:9000
+python traffic_node.py --id Node3 --host 127.0.0.1 --port 5003 --peers 127.0.0.1:5001,127.0.0.1:5002 --logger 127.0.0.1:9000
 ```
 
 ### Passo 3: Observar o Sistema
