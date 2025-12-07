@@ -470,11 +470,9 @@ class TrafficLight:
         """
         Solicita entrada na seção crítica (ficar VERDE)
         
-        [ALGORITMO DE RICART-AGRAWALA - REQUISIÇÃO]
-        1. Muda estado para WANTED
-        2. Incrementa relógio (evento local)
-        3. Envia request_access para todos os peers
-        4. Aguarda todas as respostas
+        [MODIFICADO PARA TOLERÂNCIA A FALHAS]
+        Se um peer não for alcançável durante o envio da requisição,
+        ele é removido do quórum necessário para este ciclo.
         """
         with self.state_lock:
             self.mutex_state = self.WANTED
@@ -485,8 +483,9 @@ class TrafficLight:
         print(f"\n[{self.node_id}] === REQUISITANDO SEÇÃO CRÍTICA "
               f"(T={self.request_timestamp}) ===")
         
+        # Lista de peers ativos neste ciclo (para quem conseguimos enviar)
+        active_request_peers = [] 
         # Envia requisição para todos os peers
-        successful_sends = 0
         for peer in self.peers:
             # [LAMPORT] Ao enviar: usa o timestamp
             send_time = self.clock.send_time()
@@ -500,36 +499,49 @@ class TrafficLight:
                     "address": (self.host, self.port)
                 },
                 clock_time=send_time,
-                max_retries=3
+                max_retries=1  # Reduzir retries para não travar muito se o nó caiu
             )
             
             if success:
-                successful_sends += 1
+                active_request_peers.append(peer)
             else:
-                print(f"[{self.node_id}] ⚠ Falha ao enviar para {peer}")
+                # Se falhou o envio, assumimos que o nó está morto (CRASH)
+                # Não precisamos da permissão dele.
+                print(f"[{self.node_id}] ⚠ Peer {peer} inalcançável (Crash Detectado). Ignorando na contagem.")
         
-        print(f"[{self.node_id}] Requisições enviadas: {successful_sends}/{len(self.peers)}")
-        print(f"[{self.node_id}] Aguardando {len(self.peers)} respostas...")
+        # O número alvo de respostas é baseado apenas nos envios com SUCESSO
+        target_replies = len(active_request_peers)
         
-        # Aguarda todas as respostas com timeout
-        max_wait = 30  # 30 segundos máximo
+        print(f"[{self.node_id}] Requisições enviadas com sucesso: {target_replies}/{len(self.peers)}")
+        
+        # Se não há ninguém vivo, entra direto (ou se só tem ele na rede)
+        if target_replies == 0:
+             print(f"[{self.node_id}] Nenhum peer ativo. Entrando na seção crítica por default.")
+             return 
+
+        print(f"[{self.node_id}] Aguardando {target_replies} respostas...")
+        
+        # Aguarda respostas com timeout
+        max_wait = 15  # 15 segundos máximo
         start_time = time.time()
         
         while time.time() - start_time < max_wait:
             with self.state_lock:
-                if len(self.replies_received) >= len(self.peers):
+                # Verifica se já recebeu de todos os ATIVOS (ignorando o que caiu)
+                if len(self.replies_received) >= target_replies:
                     break
             time.sleep(0.1)
         
         with self.state_lock:
             received = len(self.replies_received)
             
-        if received >= len(self.peers):
-            print(f"[{self.node_id}] === TODAS AS RESPOSTAS RECEBIDAS ===\n")
+        if received >= target_replies:
+            print(f"[{self.node_id}] === CONSENSO ATINGIDO ({received}/{target_replies}) ===\n")
         else:
-            print(f"[{self.node_id}] ⚠ Timeout: recebidas {received}/{len(self.peers)} respostas")
-            print(f"[{self.node_id}] Continuando mesmo assim...")
-        
+            print(f"[{self.node_id}] ⚠ Timeout Crítico: recebidas {received}/{target_replies} respostas")
+            # Aqui você decide: forçar entrada ou recuar. 
+            # Em sistemas seguros, recuaria. Neste trabalho, pode seguir para não parar a demo.
+
     def enter_critical_section(self):
         """
         Entra na seção crítica (fica VERDE)
