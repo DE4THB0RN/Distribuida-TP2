@@ -470,9 +470,11 @@ class TrafficLight:
         """
         Solicita entrada na seção crítica (ficar VERDE)
         
-        [MODIFICADO PARA TOLERÂNCIA A FALHAS]
-        Se um peer não for alcançável durante o envio da requisição,
-        ele é removido do quórum necessário para este ciclo.
+        [ALGORITMO DE RICART-AGRAWALA - REQUISIÇÃO]
+        1. Muda estado para WANTED
+        2. Incrementa relógio (evento local)
+        3. Envia request_access para todos os peers
+        4. Aguarda todas as respostas
         """
         with self.state_lock:
             self.mutex_state = self.WANTED
@@ -483,14 +485,12 @@ class TrafficLight:
         print(f"\n[{self.node_id}] === REQUISITANDO SEÇÃO CRÍTICA "
               f"(T={self.request_timestamp}) ===")
         
-        # Lista de peers ativos neste ciclo (para quem conseguimos enviar)
-        active_request_peers = [] 
         # Envia requisição para todos os peers
-        
-        # [LAMPORT] Ao enviar: usa o timestamp
-        send_time = self.clock.send_time()
-
+        successful_sends = 0
         for peer in self.peers:
+            # [LAMPORT] Ao enviar: usa o timestamp
+            send_time = self.clock.send_time()
+            
             # [RPC MANUAL] Invoca método remoto com retry
             success = self.comms.send_rpc(
                 peer,
@@ -500,49 +500,36 @@ class TrafficLight:
                     "address": (self.host, self.port)
                 },
                 clock_time=send_time,
-                max_retries=1  # Reduzir retries para não travar muito se o nó caiu
+                max_retries=3
             )
             
             if success:
-                active_request_peers.append(peer)
+                successful_sends += 1
             else:
-                # Se falhou o envio, assumimos que o nó está morto (CRASH)
-                # Não precisamos da permissão dele.
-                print(f"[{self.node_id}] ⚠ Peer {peer} inalcançável (Crash Detectado). Ignorando na contagem.")
+                print(f"[{self.node_id}] ⚠ Falha ao enviar para {peer}")
         
-        # O número alvo de respostas é baseado apenas nos envios com SUCESSO
-        target_replies = len(active_request_peers)
+        print(f"[{self.node_id}] Requisições enviadas: {successful_sends}/{len(self.peers)}")
+        print(f"[{self.node_id}] Aguardando {len(self.peers)} respostas...")
         
-        print(f"[{self.node_id}] Requisições enviadas com sucesso: {target_replies}/{len(self.peers)}")
-        
-        # Se não há ninguém vivo, entra direto (ou se só tem ele na rede)
-        if target_replies == 0:
-             print(f"[{self.node_id}] Nenhum peer ativo. Entrando na seção crítica por default.")
-             return 
-
-        print(f"[{self.node_id}] Aguardando {target_replies} respostas...")
-        
-        # Aguarda respostas com timeout
-        max_wait = 15  # 15 segundos máximo
+        # Aguarda todas as respostas com timeout
+        max_wait = 30  # 30 segundos máximo
         start_time = time.time()
         
         while time.time() - start_time < max_wait:
             with self.state_lock:
-                # Verifica se já recebeu de todos os ATIVOS (ignorando o que caiu)
-                if len(self.replies_received) >= target_replies:
+                if len(self.replies_received) >= len(self.peers):
                     break
             time.sleep(0.1)
         
         with self.state_lock:
             received = len(self.replies_received)
             
-        if received >= target_replies:
-            print(f"[{self.node_id}] === CONSENSO ATINGIDO ({received}/{target_replies}) ===\n")
+        if received >= len(self.peers):
+            print(f"[{self.node_id}] === TODAS AS RESPOSTAS RECEBIDAS ===\n")
         else:
-            print(f"[{self.node_id}] ⚠ Timeout Crítico: recebidas {received}/{target_replies} respostas")
-            # Aqui você decide: forçar entrada ou recuar. 
-            # Em sistemas seguros, recuaria. Neste trabalho, pode seguir para não parar a demo.
-
+            print(f"[{self.node_id}] ⚠ Timeout: recebidas {received}/{len(self.peers)} respostas")
+            print(f"[{self.node_id}] Continuando mesmo assim...")
+        
     def enter_critical_section(self):
         """
         Entra na seção crítica (fica VERDE)
@@ -553,7 +540,9 @@ class TrafficLight:
         with self.state_lock:
             self.mutex_state = self.HELD
             
-        # Transição: RED -> GREEN
+        # Transição: RED -> YELLOW -> GREEN
+        self.change_light_state(self.YELLOW)
+        time.sleep(1)
         self.change_light_state(self.GREEN)
         
         print(f"[{self.node_id}] *** NA SEÇÃO CRÍTICA (VERDE) ***")
